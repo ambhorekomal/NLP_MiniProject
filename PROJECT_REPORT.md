@@ -1,8 +1,8 @@
 # Project Report  
 ## Fine-Tuned Transformer Models for Sentiment Analysis with Explainable Attention (Colab)
 
-**Course / Institution:** *(fill in)*  
-**Author:** *(fill in)*  
+**Course / Institution:** *NLP*  
+**Author:** *KOMAL AMBHORE*  
 **Date:** April 2026  
 
 ---
