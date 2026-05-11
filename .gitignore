@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+.env
+
+# ML artifacts (large)
+models/
+outputs/
+*.pt
+*.bin
+checkpoints/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

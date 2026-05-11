@@ -1,0 +1,962 @@
+# NLP_Miniproject.ipynb - Deep Line-by-Line Code Explanation (Comments Skipped)
+
+This guide explains only executable code lines from `NLP_Miniproject.ipynb`.
+Comment-only lines and blank lines are intentionally skipped.
+
+## Code Cell 1
+
+- **Notebook line 5**: `!pip install transformers datasets scikit-learn gradio matplotlib seaborn wordcloud pandas -q`
+  - Runs a shell command inside the notebook to install all required packages. The `-q` flag keeps output short so training logs stay cleaner.
+- **Notebook line 10**: `import traceback`
+  - Imports traceback so full error stack traces can be shown in the UI when something fails, which helps debugging quickly.
+- **Notebook line 11**: `import time`
+  - Imports time utilities used to measure training and inference speed with start/end timestamps.
+- **Notebook line 12**: `import pandas as pd`
+  - Imports pandas as `pd` to build tabular outputs (like confidence charts) that Gradio can render nicely.
+- **Notebook line 13**: `import numpy as np`
+  - Imports NumPy for numerical helpers such as index arrays used in plotting grouped bars.
+- **Notebook line 14**: `import matplotlib.pyplot as plt`
+  - Imports Matplotlib plotting API as `plt` for all static visualizations (loss, ROC, comparisons, etc.).
+- **Notebook line 15**: `import seaborn as sns`
+  - Imports Seaborn for higher-level statistical plots; here it is mainly used for a cleaner confusion matrix heatmap.
+- **Notebook line 16**: `import torch`
+  - Imports PyTorch, the deep-learning backend used for tensor operations, model training, and inference.
+- **Notebook line 17**: `import gradio as gr`
+  - Imports Gradio to build a web UI so users can run sentiment predictions interactively.
+- **Notebook line 19**: `from wordcloud import WordCloud`
+  - Imports WordCloud class to visualize frequently occurring words from the dataset.
+- **Notebook line 20**: `from datasets import load_dataset`
+  - Imports Hugging Face `load_dataset` helper to download and access IMDB data with a simple API.
+- **Notebook line 21**: `from sklearn.metrics import (`
+  - Starts a multi-line import of evaluation metrics used after training to measure classification quality from different angles.
+- **Notebook line 22**: `    accuracy_score,`
+  - Adds accuracy metric import: percentage of predictions that match true labels.
+- **Notebook line 23**: `    confusion_matrix,`
+  - Adds confusion matrix import: counts true/false positives/negatives for error pattern analysis.
+- **Notebook line 24**: `    f1_score,`
+  - Adds F1-score import: harmonic mean of precision and recall, useful when class errors matter more than raw accuracy.
+- **Notebook line 25**: `    classification_report,`
+  - Adds classification report import to generate per-class precision/recall/F1 plus support in text format.
+- **Notebook line 26**: `    roc_curve,`
+  - Adds ROC curve import to compute threshold-based true-positive and false-positive rates.
+- **Notebook line 27**: `    auc,`
+  - Adds AUC import to summarize ROC performance as a single score.
+- **Notebook line 28**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 30**: `from torch.utils.data import DataLoader`
+  - Imports DataLoader to batch, shuffle, and stream tokenized data into the model during training.
+- **Notebook line 31**: `from transformers import (`
+  - Starts importing Hugging Face transformer classes required for tokenizer loading and sequence classification models.
+- **Notebook line 32**: `    AutoModelForSequenceClassification,`
+  - Imports generic auto-classifier model loader that picks the correct architecture from model name automatically.
+- **Notebook line 33**: `    AutoTokenizer,`
+  - Imports tokenizer loader that matches the selected pretrained model vocabulary and token rules.
+- **Notebook line 34**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 39**: `device = torch.device("cuda" if torch.cuda.is_available() else "cpu")`
+  - Selects compute device at runtime: uses GPU (`cuda`) for speed if available, otherwise falls back to CPU safely.
+- **Notebook line 40**: `print("Using device:", device)`
+  - Prints chosen device so you can verify hardware usage before long training begins.
+- **Notebook line 45**: `dataset = load_dataset("imdb")`
+  - Downloads/loads the IMDB sentiment dataset and returns train/test splits in Hugging Face Dataset format.
+- **Notebook line 50**: `dataset["train"] = dataset["train"].shuffle(seed=42).select(range(1000))`
+  - Randomly shuffles training data with a fixed seed for reproducibility, then keeps only first 1000 samples to train faster.
+- **Notebook line 51**: `dataset["test"] = dataset["test"].shuffle(seed=42).select(range(400))`
+  - Shuffles test data and keeps 400 samples so evaluation stays quick while still giving a rough performance estimate.
+- **Notebook line 53**: `MAX_LEN = 128`
+  - Defines max token length for each review; longer text is truncated and shorter text is padded to this size.
+- **Notebook line 58**: `def inputs_to_device(batch, dev):`
+  - Defines a utility function to move every tensor in a batch dictionary to CPU/GPU in one compact step.
+- **Notebook line 59**: `    return {k: v.to(dev) for k, v in batch.items()}`
+  - Uses dictionary comprehension to transfer each tensor value to target device while keeping original keys unchanged.
+- **Notebook line 64**: `def tokenize_data(model_name):`
+  - Defines preprocessing pipeline that loads tokenizer, tokenizes text, aligns label field, and sets tensor output format.
+- **Notebook line 65**: `    tokenizer = AutoTokenizer.from_pretrained(model_name)`
+  - Loads tokenizer files (vocabulary + tokenization rules) for the selected model so input text is encoded correctly.
+- **Notebook line 67**: `    def tokenize(example):`
+  - Creates inner function applied to each sample/batch to convert raw review text into model-ready token IDs and masks.
+- **Notebook line 68**: `        return tokenizer(`
+  - Begins tokenizer call that returns encoded tensors/arrays needed by transformer models.
+- **Notebook line 69**: `            example["text"],`
+  - Passes raw review text field from IMDB sample into tokenizer.
+- **Notebook line 70**: `            padding="max_length",`
+  - Pads every sequence to fixed length so batches have consistent shape.
+- **Notebook line 71**: `            truncation=True,`
+  - Enables safe truncation when review is longer than maximum token limit.
+- **Notebook line 72**: `            max_length=MAX_LEN,`
+  - Uses shared `MAX_LEN` constant as sequence length budget.
+- **Notebook line 73**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 75**: `    tokenized = dataset.map(tokenize, batched=True)`
+  - Applies tokenization function across full dataset efficiently in batched mode.
+- **Notebook line 77**: `    if "label" in tokenized["train"].column_names:`
+  - Checks whether original dataset uses `label` column name before renaming for transformer training compatibility.
+- **Notebook line 78**: `        tokenized = tokenized.rename_column("label", "labels")`
+  - Renames `label` to `labels` because Hugging Face models expect target field as `labels` during supervised training.
+- **Notebook line 80**: `    tokenized.set_format(`
+  - Starts configuration to output selected columns directly as PyTorch tensors instead of Python lists.
+- **Notebook line 81**: `        type="torch",`
+  - Specifies PyTorch tensor output format.
+- **Notebook line 82**: `        columns=["input_ids", "attention_mask", "labels"],`
+  - Keeps only model-required fields to reduce memory and simplify downstream DataLoader batches.
+- **Notebook line 83**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 85**: `    return tokenizer, tokenized`
+  - Returns tokenizer and processed dataset so training function can reuse both.
+- **Notebook line 90**: `def train_model(model_name, epochs=1, batch_size=16):`
+  - Defines end-to-end training + evaluation routine for any model name with configurable epochs and batch size.
+- **Notebook line 92**: `    tokenizer, tokenized = tokenize_data(model_name)`
+  - Runs preprocessing for the selected model and receives tokenized train/test datasets.
+- **Notebook line 94**: `    model = AutoModelForSequenceClassification.from_pretrained(`
+  - Starts loading a pretrained transformer backbone and attaches a classification head for sentiment prediction.
+- **Notebook line 95**: `        model_name,`
+  - Uses provided model identifier (for example BERT or DistilBERT) to fetch matching pretrained weights.
+- **Notebook line 96**: `        num_labels=2,`
+  - Configures classifier head for binary sentiment labels: negative vs positive.
+- **Notebook line 97**: `        attn_implementation="eager",`
+  - Forces eager attention implementation, often used for compatibility/stability in some environments.
+- **Notebook line 98**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 100**: `    model.to(device)`
+  - Moves model parameters to selected device so forward/backward passes run there.
+- **Notebook line 102**: `    train_loader = DataLoader(`
+  - Starts DataLoader creation to iterate training samples in mini-batches.
+- **Notebook line 103**: `        tokenized["train"],`
+  - Uses tokenized training split as DataLoader source.
+- **Notebook line 104**: `        batch_size=batch_size,`
+  - Applies function argument batch size, controlling memory use and gradient update frequency.
+- **Notebook line 105**: `        shuffle=True,`
+  - Shuffles sample order each epoch to reduce overfitting to sequence order.
+- **Notebook line 106**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 108**: `    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)`
+  - Creates AdamW optimizer with small learning rate suited for fine-tuning pretrained transformers.
+- **Notebook line 110**: `    training_losses = []`
+  - Initializes list to store average training loss per epoch for later plotting.
+- **Notebook line 112**: `    start_time = time.time()`
+  - Stores training start timestamp to measure total runtime.
+- **Notebook line 114**: `    model.train()`
+  - Enables training behaviors (for example dropout active) before optimization loop.
+- **Notebook line 116**: `    for epoch in range(epochs):`
+  - Runs training loop for requested number of full dataset passes (epochs).
+- **Notebook line 118**: `        total_loss = 0`
+  - Resets cumulative epoch loss before batch loop starts.
+- **Notebook line 120**: `        for batch in train_loader:`
+  - Iterates through each mini-batch produced by DataLoader.
+- **Notebook line 122**: `            batch = inputs_to_device(batch, device)`
+  - Moves batch tensors to same device as model to avoid device mismatch errors.
+- **Notebook line 124**: `            outputs = model(**batch)`
+  - Performs forward pass; model computes logits and loss because `labels` are included in batch.
+- **Notebook line 126**: `            loss = outputs.loss`
+  - Extracts scalar training loss used for gradient computation.
+- **Notebook line 128**: `            loss.backward()`
+  - Backpropagates loss to compute gradients for all trainable parameters.
+- **Notebook line 129**: `            optimizer.step()`
+  - Applies one optimization step to update weights based on current gradients.
+- **Notebook line 130**: `            optimizer.zero_grad()`
+  - Clears gradients so next batch does not accumulate old gradient values.
+- **Notebook line 132**: `            total_loss += loss.item()`
+  - Adds current batch loss (as Python float) to running epoch total.
+- **Notebook line 134**: `        avg_loss = total_loss / len(train_loader)`
+  - Calculates mean loss across all batches in this epoch.
+- **Notebook line 135**: `        training_losses.append(avg_loss)`
+  - Stores epoch average loss for monitoring and later visualization.
+- **Notebook line 137**: `        print(f"Epoch {epoch+1} Loss: {avg_loss}")`
+  - Prints progress so you can track whether training is converging.
+- **Notebook line 139**: `    training_time = time.time() - start_time`
+  - Computes total training duration in seconds.
+- **Notebook line 145**: `    model.eval()`
+  - Switches model to inference mode for stable evaluation (disables training-only behaviors like dropout randomness).
+- **Notebook line 147**: `    preds = []`
+  - Creates list to collect predicted class labels for test set.
+- **Notebook line 148**: `    labels = []`
+  - Creates list to collect ground-truth labels for metrics calculation.
+- **Notebook line 149**: `    probabilities = []`
+  - Creates list to collect positive-class probabilities for ROC plotting.
+- **Notebook line 151**: `    for sample in tokenized["test"]:`
+  - Loops through each test sample for evaluation.
+- **Notebook line 153**: `        batch = {`
+  - Starts building a one-sample batch dictionary for model input.
+- **Notebook line 154**: `            "input_ids": sample["input_ids"].unsqueeze(0).to(device),`
+  - Adds token IDs, inserts batch dimension with `unsqueeze(0)`, and moves tensor to compute device.
+- **Notebook line 155**: `            "attention_mask": sample["attention_mask"].unsqueeze(0).to(device),`
+  - Adds attention mask with batch dimension so model ignores padded tokens correctly.
+- **Notebook line 156**: `        }`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 158**: `        with torch.no_grad():`
+  - Disables gradient tracking for evaluation to reduce memory use and speed up inference.
+- **Notebook line 159**: `            outputs = model(**batch)`
+  - Performs forward pass; model computes logits and loss because `labels` are included in batch.
+- **Notebook line 161**: `        probs = torch.softmax(outputs.logits, dim=1)`
+  - Converts raw logits into normalized class probabilities along class dimension.
+- **Notebook line 163**: `        pred = torch.argmax(probs, dim=1).item()`
+  - Selects class index with highest probability and converts to plain Python integer.
+- **Notebook line 165**: `        preds.append(pred)`
+  - Stores predicted label for this test sample.
+- **Notebook line 166**: `        probabilities.append(probs[:, 1].item())`
+  - Stores positive-class probability only, needed for threshold-based ROC/AUC analysis.
+- **Notebook line 168**: `        y = sample["labels"]`
+  - Reads true label from test sample.
+- **Notebook line 169**: `        labels.append(int(y.item()) if torch.is_tensor(y) else int(y))`
+  - Safely converts label to Python int whether it is a tensor or already numeric.
+- **Notebook line 171**: `    acc = accuracy_score(labels, preds)`
+  - Computes overall classification accuracy on test data.
+- **Notebook line 172**: `    f1 = f1_score(labels, preds)`
+  - Computes F1 score to balance precision and recall in one metric.
+- **Notebook line 174**: `    report = classification_report(labels, preds)`
+  - Generates detailed text report with per-class precision/recall/F1/support.
+- **Notebook line 176**: `    return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 177**: `        model,`
+  - Returns trained model object so it can be reused for prediction/UI.
+- **Notebook line 178**: `        tokenizer,`
+  - Returns matching tokenizer required to encode future text inputs.
+- **Notebook line 179**: `        {`
+  - Starts dictionary that bundles all evaluation metrics and artifacts.
+- **Notebook line 180**: `            "accuracy": acc,`
+  - Stores accuracy metric in results dictionary.
+- **Notebook line 181**: `            "f1": f1,`
+  - Stores F1 score in results dictionary.
+- **Notebook line 182**: `            "training_time": training_time,`
+  - Stores measured training time for model-speed comparison.
+- **Notebook line 183**: `            "report": report,`
+  - Stores full classification report string for display in UI tab.
+- **Notebook line 184**: `            "losses": training_losses,`
+  - Stores per-epoch loss values for plotting learning curve.
+- **Notebook line 185**: `            "labels": labels,`
+  - Stores true labels so plotting functions can reuse them later.
+- **Notebook line 186**: `            "preds": preds,`
+  - Stores predicted labels for confusion matrix and other diagnostics.
+- **Notebook line 187**: `            "probs": probabilities,`
+  - Stores probability scores for ROC/AUC computation.
+- **Notebook line 188**: `        },`
+  - Closes the metrics dictionary inside return tuple.
+- **Notebook line 189**: `        tokenized["test"],`
+  - Returns tokenized test split for optional downstream analysis.
+- **Notebook line 190**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 195**: `bert_model, bert_tokenizer, bert_results, test_data = train_model(`
+  - Starts training/evaluating the first model and unpacks returned model, tokenizer, metrics, and test data.
+- **Notebook line 196**: `    "bert-base-uncased",`
+  - Chooses base uncased BERT checkpoint as model backbone.
+- **Notebook line 197**: `    epochs=1,`
+  - Sets epoch count to 1 for faster demo training (can be increased for better performance).
+- **Notebook line 198**: `    batch_size=16,`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 199**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 202**: `distil_model, distil_tokenizer, distil_results, _ = train_model(`
+  - Starts training/evaluating DistilBERT and ignores returned test set with `_` because it is not needed again.
+- **Notebook line 203**: `    "distilbert-base-uncased",`
+  - Chooses lightweight DistilBERT checkpoint for speed/efficiency comparison.
+- **Notebook line 204**: `    epochs=1,`
+  - Sets epoch count to 1 for faster demo training (can be increased for better performance).
+- **Notebook line 205**: `    batch_size=16,`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 206**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 208**: `print("BERT Results:", bert_results["accuracy"])`
+  - Prints BERT accuracy quickly after training for immediate feedback.
+- **Notebook line 209**: `print("DistilBERT Results:", distil_results["accuracy"])`
+  - Prints DistilBERT accuracy for side-by-side comparison.
+- **Notebook line 214**: `def plot_model_comparison():`
+  - Defines helper to compare both models visually using bar charts for accuracy and F1.
+- **Notebook line 216**: `    models = ["BERT", "DistilBERT"]`
+  - Creates x-axis model labels.
+- **Notebook line 218**: `    accuracies = [`
+  - Starts list of accuracy values to plot.
+- **Notebook line 219**: `        bert_results["accuracy"],`
+  - Takes BERT accuracy from stored results.
+- **Notebook line 220**: `        distil_results["accuracy"],`
+  - Takes DistilBERT accuracy from stored results.
+- **Notebook line 221**: `    ]`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 223**: `    f1_scores = [`
+  - Starts list of F1 values to plot.
+- **Notebook line 224**: `        bert_results["f1"],`
+  - Takes BERT F1 score.
+- **Notebook line 225**: `        distil_results["f1"],`
+  - Takes DistilBERT F1 score.
+- **Notebook line 226**: `    ]`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 228**: `    x = np.arange(len(models))`
+  - Creates numeric x positions for bar groups.
+- **Notebook line 230**: `    width = 0.35`
+  - Defines width of each bar so two metrics fit side-by-side.
+- **Notebook line 232**: `    plt.figure(figsize=(8, 5))`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 234**: `    plt.bar(x - width / 2, accuracies, width, label="Accuracy")`
+  - Draws accuracy bars shifted left in each model group.
+- **Notebook line 235**: `    plt.bar(x + width / 2, f1_scores, width, label="F1 Score")`
+  - Draws F1 bars shifted right in each model group.
+- **Notebook line 237**: `    plt.xticks(x, models)`
+  - Replaces numeric x ticks with model names for readability.
+- **Notebook line 238**: `    plt.ylabel("Score")`
+  - Sets y-axis label.
+- **Notebook line 239**: `    plt.title("Model Comparison")`
+  - Sets chart title.
+- **Notebook line 240**: `    plt.legend()`
+  - Shows legend distinguishing accuracy and F1 bars.
+- **Notebook line 241**: `    plt.show()`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 243**: `plot_model_comparison()`
+  - Calls function immediately to display the comparison chart.
+- **Notebook line 248**: `def plot_confusion_matrix(labels, preds):`
+  - Defines function to visualize confusion matrix from true and predicted labels.
+- **Notebook line 250**: `    cm = confusion_matrix(labels, preds)`
+  - Computes confusion matrix counts.
+- **Notebook line 252**: `    plt.figure(figsize=(5, 4))`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 254**: `    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")`
+  - Renders confusion matrix as annotated integer heatmap using blue color palette.
+- **Notebook line 256**: `    plt.xlabel("Predicted")`
+  - Labels x-axis as predicted class.
+- **Notebook line 257**: `    plt.ylabel("Actual")`
+  - Labels y-axis as ground-truth class.
+- **Notebook line 258**: `    plt.title("Confusion Matrix")`
+  - Sets heatmap title.
+- **Notebook line 260**: `    plt.show()`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 262**: `plot_confusion_matrix(`
+  - Starts function call with BERT labels/predictions to draw its confusion matrix.
+- **Notebook line 263**: `    bert_results["labels"],`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 264**: `    bert_results["preds"],`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 265**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 270**: `def plot_roc_curve(labels, probs):`
+  - Defines helper to draw ROC curve from true labels and positive-class probabilities.
+- **Notebook line 272**: `    fpr, tpr, _ = roc_curve(labels, probs)`
+  - Computes false-positive rate and true-positive rate at different thresholds.
+- **Notebook line 274**: `    roc_auc = auc(fpr, tpr)`
+  - Calculates area under ROC curve as overall discrimination score.
+- **Notebook line 276**: `    plt.figure(figsize=(6, 5))`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 278**: `    plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")`
+  - Plots ROC curve and shows AUC in legend label.
+- **Notebook line 280**: `    plt.plot([0, 1], [0, 1], linestyle="--")`
+  - Draws diagonal baseline line representing random classifier performance.
+- **Notebook line 282**: `    plt.xlabel("False Positive Rate")`
+  - Sets ROC x-axis label.
+- **Notebook line 283**: `    plt.ylabel("True Positive Rate")`
+  - Sets ROC y-axis label.
+- **Notebook line 284**: `    plt.title("ROC Curve")`
+  - Sets ROC plot title.
+- **Notebook line 285**: `    plt.legend()`
+  - Shows legend distinguishing accuracy and F1 bars.
+- **Notebook line 286**: `    plt.show()`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 288**: `plot_roc_curve(`
+  - Starts ROC plotting call using BERT test labels and predicted probabilities.
+- **Notebook line 289**: `    bert_results["labels"],`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 290**: `    bert_results["probs"],`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 291**: `)`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 296**: `def plot_training_loss(losses, model_name):`
+  - Defines helper to visualize how training loss changes across epochs.
+- **Notebook line 298**: `    plt.figure(figsize=(6, 4))`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 300**: `    plt.plot(losses, marker="o")`
+  - Plots loss sequence and marks each epoch point with circles.
+- **Notebook line 302**: `    plt.xlabel("Epoch")`
+  - Labels x-axis as epoch number.
+- **Notebook line 303**: `    plt.ylabel("Loss")`
+  - Labels y-axis as training loss value.
+- **Notebook line 304**: `    plt.title(f"Training Loss - {model_name}")`
+  - Sets dynamic title including model name.
+- **Notebook line 306**: `    plt.show()`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 308**: `plot_training_loss(bert_results["losses"], "BERT")`
+  - Plots BERT loss curve.
+- **Notebook line 309**: `plot_training_loss(distil_results["losses"], "DistilBERT")`
+  - Plots DistilBERT loss curve.
+- **Notebook line 314**: `def generate_wordcloud():`
+  - Defines function to build a word cloud from a subset of review texts.
+- **Notebook line 316**: `    text = " ".join(dataset["train"]["text"][:200])`
+  - Concatenates first 200 training reviews into one long string for frequency-based word cloud generation.
+- **Notebook line 318**: `    wc = WordCloud(width=800, height=400).generate(text)`
+  - Creates word-cloud object with chosen size and generates it from combined text.
+- **Notebook line 320**: `    plt.figure(figsize=(10, 5))`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 321**: `    plt.imshow(wc)`
+  - Displays generated word cloud image.
+- **Notebook line 322**: `    plt.axis("off")`
+  - Hides axis ticks/lines so only cloud image is visible.
+- **Notebook line 323**: `    plt.title("Word Cloud")`
+  - Sets title for word cloud plot.
+- **Notebook line 324**: `    plt.show()`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 326**: `generate_wordcloud()`
+  - Runs word cloud generation and plotting now.
+- **Notebook line 331**: `def explain_prediction(text, model, tokenizer):`
+  - Defines explainability function that uses attention weights to estimate influential tokens in a prediction.
+- **Notebook line 333**: `    model.eval()`
+  - Switches model to inference mode for stable evaluation (disables training-only behaviors like dropout randomness).
+- **Notebook line 335**: `    inputs = tokenizer(`
+  - Starts tokenization call for single input text before explanation inference.
+- **Notebook line 336**: `        text,`
+  - Supplies user text for tokenization.
+- **Notebook line 337**: `        return_tensors="pt",`
+  - Requests PyTorch tensor output directly from tokenizer.
+- **Notebook line 338**: `        truncation=True,`
+  - Enables safe truncation when review is longer than maximum token limit.
+- **Notebook line 339**: `        max_length=MAX_LEN,`
+  - Uses shared `MAX_LEN` constant as sequence length budget.
+- **Notebook line 340**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 342**: `    inputs = inputs_to_device(inputs, device)`
+  - Moves tokenized input tensors to model device.
+- **Notebook line 344**: `    with torch.no_grad():`
+  - Disables gradient tracking for evaluation to reduce memory use and speed up inference.
+- **Notebook line 345**: `        outputs = model(**inputs, output_attentions=True)`
+  - Runs forward pass and asks model to return attention tensors for interpretability.
+- **Notebook line 347**: `    attentions = outputs.attentions[-1]`
+  - Selects last transformer layer attention maps, often most task-specific.
+- **Notebook line 349**: `    tokens = tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])`
+  - Converts token IDs back to readable token strings for display.
+- **Notebook line 351**: `    attn = attentions[0].mean(dim=0)`
+  - Averages attention across heads for first (and only) sample to get a single attention map.
+- **Notebook line 353**: `    scores = attn.mean(dim=0).detach().cpu().numpy()`
+  - Averages token attention, detaches from graph, moves to CPU, and converts to NumPy for sorting.
+- **Notebook line 355**: `    important_tokens = sorted(`
+  - Starts sorting token-score pairs by descending attention score.
+- **Notebook line 356**: `        zip(tokens, scores),`
+  - Pairs each token with its computed importance score.
+- **Notebook line 357**: `        key=lambda x: x[1],`
+  - Sort key uses score element from each `(token, score)` tuple.
+- **Notebook line 358**: `        reverse=True,`
+  - Sorts from highest score to lowest.
+- **Notebook line 359**: `    )[:10]`
+  - Keeps only top 10 most important tokens.
+- **Notebook line 361**: `    return important_tokens`
+  - Returns top token-importance pairs for explanation display.
+- **Notebook line 366**: `def predict(text, model, tokenizer):`
+  - Defines single-text inference function returning sentiment label, confidence values, and important tokens.
+- **Notebook line 368**: `    model.eval()`
+  - Switches model to inference mode for stable evaluation (disables training-only behaviors like dropout randomness).
+- **Notebook line 370**: `    inputs = tokenizer(`
+  - Starts tokenization call for single input text before explanation inference.
+- **Notebook line 371**: `        text,`
+  - Supplies user text for tokenization.
+- **Notebook line 372**: `        return_tensors="pt",`
+  - Requests PyTorch tensor output directly from tokenizer.
+- **Notebook line 373**: `        truncation=True,`
+  - Enables safe truncation when review is longer than maximum token limit.
+- **Notebook line 374**: `        max_length=MAX_LEN,`
+  - Uses shared `MAX_LEN` constant as sequence length budget.
+- **Notebook line 375**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 377**: `    inputs = inputs_to_device(inputs, device)`
+  - Moves tokenized input tensors to model device.
+- **Notebook line 379**: `    with torch.no_grad():`
+  - Disables gradient tracking for evaluation to reduce memory use and speed up inference.
+- **Notebook line 380**: `        outputs = model(**inputs)`
+  - Runs model inference on prepared input without requesting attentions.
+- **Notebook line 382**: `    probs = torch.softmax(outputs.logits, dim=1)`
+  - Converts raw logits into normalized class probabilities along class dimension.
+- **Notebook line 384**: `    pred = torch.argmax(probs, dim=1).item()`
+  - Selects class index with highest probability and converts to plain Python integer.
+- **Notebook line 386**: `    confidence = probs.max().item()`
+  - Extracts highest class probability as overall confidence score.
+- **Notebook line 388**: `    positive_prob = probs[0][1].item()`
+  - Reads positive-class probability from first sample in batch.
+- **Notebook line 389**: `    negative_prob = probs[0][0].item()`
+  - Reads negative-class probability from first sample in batch.
+- **Notebook line 391**: `    label = "Positive" if pred == 1 else "Negative"`
+  - Maps predicted class index to human-readable sentiment text.
+- **Notebook line 393**: `    explanation = explain_prediction(text, model, tokenizer)`
+  - Calls attention-based explanation function to get important words for this input.
+- **Notebook line 395**: `    return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 396**: `        label,`
+  - Returns sentiment label from prediction function.
+- **Notebook line 397**: `        confidence,`
+  - Returns max confidence score.
+- **Notebook line 398**: `        positive_prob,`
+  - Returns positive-class probability.
+- **Notebook line 399**: `        negative_prob,`
+  - Returns negative-class probability.
+- **Notebook line 400**: `        explanation,`
+  - Returns token-importance explanation list.
+- **Notebook line 401**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 406**: `bert_model.save_pretrained("bert_sentiment_model")`
+  - Saves trained BERT model weights/config to local folder so it can be loaded later without retraining.
+- **Notebook line 407**: `bert_tokenizer.save_pretrained("bert_sentiment_model")`
+  - Saves tokenizer files in same folder to keep preprocessing consistent with saved model.
+- **Notebook line 409**: `print("Model Saved Successfully")`
+  - Confirms save operation completed.
+- **Notebook line 414**: `def batch_predict(texts, model, tokenizer):`
+  - Defines utility to run predictions for multiple texts and return results as a table.
+- **Notebook line 416**: `    results = []`
+  - Initializes empty list to collect prediction rows.
+- **Notebook line 418**: `    for text in texts:`
+  - Loops over each input text in provided list.
+- **Notebook line 420**: `        label, confidence, _, _, _ = predict(`
+  - Calls prediction function and keeps only label + confidence, ignoring other returned values.
+- **Notebook line 421**: `            text,`
+  - Supplies user text for tokenization.
+- **Notebook line 422**: `            model,`
+  - Returns trained model object so it can be reused for prediction/UI.
+- **Notebook line 423**: `            tokenizer,`
+  - Returns matching tokenizer required to encode future text inputs.
+- **Notebook line 424**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 426**: `        results.append({`
+  - Adds one row dictionary for current text into results list.
+- **Notebook line 427**: `            "Text": text[:50],`
+  - Stores only first 50 characters of text to keep table compact.
+- **Notebook line 428**: `            "Prediction": label,`
+  - Stores predicted sentiment label.
+- **Notebook line 429**: `            "Confidence": confidence,`
+  - Stores model confidence score.
+- **Notebook line 430**: `        })`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 432**: `    return pd.DataFrame(results)`
+  - Converts collected row dictionaries into pandas DataFrame.
+- **Notebook line 437**: `def app_fn(text, model_choice):`
+  - Defines backend callback for Gradio: chooses model, predicts sentiment, formats explanation and chart data.
+- **Notebook line 439**: `    try:`
+  - Starts protected block to catch runtime errors and return readable error output in UI.
+- **Notebook line 441**: `        if model_choice == "BERT":`
+  - Checks whether user selected BERT in the interface.
+- **Notebook line 442**: `            model = bert_model`
+  - Assigns trained BERT model for inference.
+- **Notebook line 443**: `            tokenizer = bert_tokenizer`
+  - Assigns BERT tokenizer for text encoding.
+- **Notebook line 444**: `        else:`
+  - Begins an indented code block related to the previous control/function statement.
+- **Notebook line 445**: `            model = distil_model`
+  - Assigns DistilBERT model when BERT is not selected.
+- **Notebook line 446**: `            tokenizer = distil_tokenizer`
+  - Assigns DistilBERT tokenizer to match selected model.
+- **Notebook line 448**: `        (`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 449**: `            label,`
+  - Returns sentiment label from prediction function.
+- **Notebook line 450**: `            confidence,`
+  - Returns max confidence score.
+- **Notebook line 451**: `            pos_prob,`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 452**: `            neg_prob,`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 453**: `            explanation,`
+  - Returns token-importance explanation list.
+- **Notebook line 454**: `        ) = predict(text, model, tokenizer)`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 456**: `        explanation_text = "\n".join(`
+  - Starts converting `(token, score)` pairs into multi-line human-readable text.
+- **Notebook line 457**: `            f"{tok}: {round(float(score), 3)}"`
+  - Formats each important token with rounded importance score (3 decimal places).
+- **Notebook line 458**: `            for tok, score in explanation`
+  - Iterates through explanation token-score pairs.
+- **Notebook line 459**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 461**: `        prob_chart = pd.DataFrame({`
+  - Builds DataFrame with positive/negative probabilities for bar chart rendering.
+- **Notebook line 462**: `            "Sentiment": ["Positive", "Negative"],`
+  - Defines two sentiment categories for chart x-axis.
+- **Notebook line 463**: `            "Probability": [pos_prob, neg_prob],`
+  - Stores corresponding class probabilities for chart bars.
+- **Notebook line 464**: `        })`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 466**: `        return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 467**: `            f"Prediction: {label}",`
+  - Returns formatted prediction text for UI output box.
+- **Notebook line 468**: `            f"Confidence: {round(confidence * 100, 2)}%",`
+  - Returns confidence as percentage with two decimal places.
+- **Notebook line 469**: `            explanation_text,`
+  - Returns multi-line important-word explanation string.
+- **Notebook line 470**: `            prob_chart,`
+  - Returns DataFrame chart data to Gradio bar-plot component.
+- **Notebook line 471**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 473**: `    except Exception as e:`
+  - Catches any exception so app does not crash and can show useful error details.
+- **Notebook line 474**: `        return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 475**: `            f"ERROR: {e}",`
+  - Returns short error message containing exception text.
+- **Notebook line 476**: `            "",`
+  - Returns empty placeholder for outputs not available on error.
+- **Notebook line 477**: `            traceback.format_exc(),`
+  - Returns full traceback string for detailed debugging.
+- **Notebook line 478**: `            None,`
+  - Returns no chart data when an error occurs.
+- **Notebook line 479**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 484**: `with gr.Blocks() as demo:`
+  - Creates a Gradio app container; all UI components defined inside become part of this interface.
+- **Notebook line 486**: `    gr.Markdown("# Advanced Transformer Sentiment Analyzer")`
+  - Adds title text at top of app.
+- **Notebook line 488**: `    with gr.Tab("Prediction"):`
+  - Creates prediction tab where user enters text and gets sentiment output.
+- **Notebook line 490**: `        text_input = gr.Textbox(label="Enter Review")`
+  - Adds input textbox for user review text.
+- **Notebook line 492**: `        model_choice = gr.Radio(`
+  - Starts radio control that lets user choose which model to run.
+- **Notebook line 493**: `            ["BERT", "DistilBERT"],`
+  - Lists selectable model options in radio button component.
+- **Notebook line 494**: `            value="DistilBERT",`
+  - Sets DistilBERT as default selected option.
+- **Notebook line 495**: `            label="Choose Model",`
+  - Sets label shown above radio button group.
+- **Notebook line 496**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 498**: `        predict_btn = gr.Button("Analyze Sentiment")`
+  - Adds button user clicks to run sentiment analysis.
+- **Notebook line 500**: `        prediction_output = gr.Textbox(label="Prediction")`
+  - Creates output textbox for final positive/negative label.
+- **Notebook line 501**: `        confidence_output = gr.Textbox(label="Confidence")`
+  - Creates output textbox for confidence percentage.
+- **Notebook line 502**: `        explanation_output = gr.Textbox(label="Important Words")`
+  - Creates output textbox for token-level explanation text.
+- **Notebook line 504**: `        chart_output = gr.BarPlot(`
+  - Starts bar plot component to visualize positive vs negative probabilities.
+- **Notebook line 505**: `            x="Sentiment",`
+  - Uses sentiment category names for chart x-axis.
+- **Notebook line 506**: `            y="Probability",`
+  - Uses probability values for chart y-axis.
+- **Notebook line 507**: `            title="Confidence Scores",`
+  - Sets chart title for probability visualization.
+- **Notebook line 508**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 510**: `        predict_btn.click(`
+  - Binds button click event to prediction callback with specified inputs/outputs.
+- **Notebook line 511**: `            fn=app_fn,`
+  - Sets callback function Gradio should execute on click.
+- **Notebook line 512**: `            inputs=[text_input, model_choice],`
+  - Passes textbox text and selected model into callback.
+- **Notebook line 513**: `            outputs=[`
+  - Starts list of UI components that receive callback results.
+- **Notebook line 514**: `                prediction_output,`
+  - First callback output goes to prediction textbox.
+- **Notebook line 515**: `                confidence_output,`
+  - Second callback output goes to confidence textbox.
+- **Notebook line 516**: `                explanation_output,`
+  - Third callback output goes to explanation textbox.
+- **Notebook line 517**: `                chart_output,`
+  - Fourth callback output updates probability bar chart.
+- **Notebook line 518**: `            ],`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 519**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 521**: `    with gr.Tab("Model Metrics"):`
+  - Creates tab to display model evaluation reports.
+- **Notebook line 523**: `        gr.Textbox(`
+  - Starts creation of textbox component for showing static informational text.
+- **Notebook line 524**: `            value=str(bert_results["report"]),`
+  - Loads BERT classification report text into UI textbox.
+- **Notebook line 525**: `            label="BERT Classification Report",`
+  - Labels textbox as BERT report.
+- **Notebook line 526**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 528**: `        gr.Textbox(`
+  - Starts creation of textbox component for showing static informational text.
+- **Notebook line 529**: `            value=str(distil_results["report"]),`
+  - Loads DistilBERT classification report text into UI textbox.
+- **Notebook line 530**: `            label="DistilBERT Classification Report",`
+  - Labels textbox as DistilBERT report.
+- **Notebook line 531**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 533**: `    with gr.Tab("System Info"):`
+  - Creates tab for runtime/system details.
+- **Notebook line 535**: `        gr.Textbox(`
+  - Starts creation of textbox component for showing static informational text.
+- **Notebook line 536**: `            value=f"Running on: {device}",`
+  - Shows selected hardware device (CPU or CUDA) in UI.
+- **Notebook line 537**: `            label="Device",`
+  - Labels this textbox as device info.
+- **Notebook line 538**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 540**: `        gr.Textbox(`
+  - Starts creation of textbox component for showing static informational text.
+- **Notebook line 541**: `            value=f"BERT Training Time: {round(bert_results['training_time'], 2)} sec",`
+  - Shows rounded BERT training time in seconds.
+- **Notebook line 542**: `            label="Training Time",`
+  - Labels textbox as training time information.
+- **Notebook line 543**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 548**: `demo.launch(share=True)`
+  - Launches Gradio app and generates a public share link.
+
+## Code Cell 2
+
+- **Notebook line 5**: `import time`
+  - Imports time utilities used to measure training and inference speed with start/end timestamps.
+- **Notebook line 6**: `import pandas as pd`
+  - Imports pandas as `pd` to build tabular outputs (like confidence charts) that Gradio can render nicely.
+- **Notebook line 8**: `def compare_models(text):`
+  - Defines function that runs both models on same text, compares confidence/time, and prepares outputs for UI.
+- **Notebook line 10**: `    if not text.strip():`
+  - Validates input; rejects empty or whitespace-only text before doing inference.
+- **Notebook line 11**: `        return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 12**: `            "Please enter text",`
+  - Returns user-friendly validation message for empty input.
+- **Notebook line 13**: `            "",`
+  - Returns empty placeholder for outputs not available on error.
+- **Notebook line 14**: `            "",`
+  - Returns empty placeholder for outputs not available on error.
+- **Notebook line 15**: `            None,`
+  - Returns no chart data when an error occurs.
+- **Notebook line 16**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 21**: `    start = time.time()`
+  - Stores start timestamp to measure model inference time.
+- **Notebook line 23**: `    bert_label, bert_conf, bert_pos, bert_neg, bert_exp = predict(`
+  - Runs BERT prediction and unpacks label, confidence, class probabilities, and explanation tokens.
+- **Notebook line 24**: `        text,`
+  - Supplies user text for tokenization.
+- **Notebook line 25**: `        bert_model,`
+  - Passes trained BERT model into prediction function.
+- **Notebook line 26**: `        bert_tokenizer,`
+  - Passes BERT tokenizer into prediction function.
+- **Notebook line 27**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 29**: `    bert_time = time.time() - start`
+  - Computes BERT inference duration in seconds.
+- **Notebook line 34**: `    start = time.time()`
+  - Stores start timestamp to measure model inference time.
+- **Notebook line 36**: `    distil_label, distil_conf, distil_pos, distil_neg, distil_exp = predict(`
+  - Runs DistilBERT prediction and unpacks its outputs for comparison.
+- **Notebook line 37**: `        text,`
+  - Supplies user text for tokenization.
+- **Notebook line 38**: `        distil_model,`
+  - Passes DistilBERT model for inference.
+- **Notebook line 39**: `        distil_tokenizer,`
+  - Passes DistilBERT tokenizer for inference.
+- **Notebook line 40**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 42**: `    distil_time = time.time() - start`
+  - Computes DistilBERT inference duration in seconds.
+- **Notebook line 48**: `    if bert_conf > distil_conf:`
+  - Compares confidence scores to decide which model appears more confident on this specific input.
+- **Notebook line 49**: `        better = "BERT seems more confident for this prediction."`
+  - Stores comparison message when BERT confidence is higher.
+- **Notebook line 50**: `    else:`
+  - Begins an indented code block related to the previous control/function statement.
+- **Notebook line 51**: `        better = "DistilBERT seems more confident for this prediction."`
+  - Stores comparison message when DistilBERT confidence is higher or equal.
+- **Notebook line 57**: `    bert_words = "\n".join(`
+  - Formats BERT important-token list into readable multi-line text.
+- **Notebook line 58**: `        f"{tok}: {round(float(score), 3)}"`
+  - Formats each important token with rounded importance score (3 decimal places).
+- **Notebook line 59**: `        for tok, score in bert_exp`
+  - Iterates through BERT explanation tokens.
+- **Notebook line 60**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 62**: `    distil_words = "\n".join(`
+  - Formats DistilBERT important-token list into readable multi-line text.
+- **Notebook line 63**: `        f"{tok}: {round(float(score), 3)}"`
+  - Formats each important token with rounded importance score (3 decimal places).
+- **Notebook line 64**: `        for tok, score in distil_exp`
+  - Iterates through DistilBERT explanation tokens.
+- **Notebook line 65**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 71**: `    graph_df = pd.DataFrame({`
+  - Creates small table used by Gradio bar chart to compare model confidences.
+- **Notebook line 72**: `        "Model": ["BERT", "DistilBERT"],`
+  - Defines model names column for comparison chart.
+- **Notebook line 73**: `        "Confidence": [bert_conf, distil_conf]`
+  - Stores both confidence values for plotting.
+- **Notebook line 74**: `    })`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 80**: `    result_text = f"""`
+  - Starts multi-line formatted string summarizing predictions, confidences, times, and overall analysis.
+- **Notebook line 82**: `BERT Prediction:`
+  - Section heading inside formatted output text.
+- **Notebook line 83**: `{bert_label}`
+  - Inserts predicted sentiment label from BERT.
+- **Notebook line 85**: `Confidence:`
+  - Label text for confidence value section.
+- **Notebook line 86**: `{round(bert_conf * 100, 2)}%`
+  - Inserts BERT confidence as percentage.
+- **Notebook line 88**: `Inference Time:`
+  - Label text for inference duration section.
+- **Notebook line 89**: `{round(bert_time, 4)} sec`
+  - Inserts BERT inference time rounded to 4 decimals.
+- **Notebook line 91**: `---------------------------------------`
+  - Visual separator line inside output text.
+- **Notebook line 93**: `DistilBERT Prediction:`
+  - Section heading for DistilBERT output.
+- **Notebook line 94**: `{distil_label}`
+  - Inserts predicted sentiment label from DistilBERT.
+- **Notebook line 96**: `Confidence:`
+  - Label text for confidence value section.
+- **Notebook line 97**: `{round(distil_conf * 100, 2)}%`
+  - Inserts DistilBERT confidence as percentage.
+- **Notebook line 99**: `Inference Time:`
+  - Label text for inference duration section.
+- **Notebook line 100**: `{round(distil_time, 4)} sec`
+  - Inserts DistilBERT inference time rounded to 4 decimals.
+- **Notebook line 102**: `---------------------------------------`
+  - Visual separator line inside output text.
+- **Notebook line 104**: `Analysis:`
+  - Heading for short overall conclusion section.
+- **Notebook line 105**: `{better}`
+  - Inserts whichever model-confidence conclusion was computed.
+- **Notebook line 107**: `"""`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 109**: `    return (`
+  - Starts returning multiple outputs from function as a tuple.
+- **Notebook line 110**: `        result_text,`
+  - Returns long comparison summary text to UI.
+- **Notebook line 111**: `        bert_words,`
+  - Returns BERT important-word text block to UI.
+- **Notebook line 112**: `        distil_words,`
+  - Returns DistilBERT important-word text block to UI.
+- **Notebook line 113**: `        graph_df,`
+  - Returns confidence DataFrame to chart component.
+- **Notebook line 114**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 121**: `with gr.Blocks(theme=gr.themes.Soft()) as demo:`
+  - Creates second Gradio app with a soft visual theme for model-vs-model comparison interface.
+- **Notebook line 123**: `    gr.Markdown(`
+  - Starts multi-line markdown title block for this UI.
+- **Notebook line 124**: `        "# Transformer Sentiment Analyzer\n"`
+  - Adds first markdown title line.
+- **Notebook line 125**: `        "## BERT vs DistilBERT Comparison"`
+  - Adds subtitle clarifying this app compares two models.
+- **Notebook line 126**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 128**: `    with gr.Row():`
+  - Creates horizontal layout row for grouping related UI elements.
+- **Notebook line 130**: `        text_input = gr.Textbox(`
+  - Starts multi-line textbox definition for user review input.
+- **Notebook line 131**: `            label="Enter Review",`
+  - Sets input label text.
+- **Notebook line 132**: `            lines=6,`
+  - Gives textbox six visible lines for longer reviews.
+- **Notebook line 133**: `            placeholder="Type movie review here..."`
+  - Shows hint text before user types.
+- **Notebook line 134**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 136**: `    analyze_btn = gr.Button("Compare Models")`
+  - Adds button to run both models on entered text.
+- **Notebook line 138**: `    with gr.Row():`
+  - Creates horizontal layout row for grouping related UI elements.
+- **Notebook line 140**: `        result_output = gr.Textbox(`
+  - Starts textbox for full prediction comparison summary.
+- **Notebook line 141**: `            label="Prediction Comparison",`
+  - Labels output textbox for comparison results.
+- **Notebook line 142**: `            lines=18`
+  - Sets larger output box height to fit multi-line summary.
+- **Notebook line 143**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 145**: `    with gr.Row():`
+  - Creates horizontal layout row for grouping related UI elements.
+- **Notebook line 147**: `        bert_words_output = gr.Textbox(`
+  - Starts textbox to show BERT token-importance list.
+- **Notebook line 148**: `            label="BERT Important Words",`
+  - Labels BERT explanation output.
+- **Notebook line 149**: `            lines=12`
+  - Sets textbox height to display many important words clearly.
+- **Notebook line 150**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 152**: `        distil_words_output = gr.Textbox(`
+  - Starts textbox to show DistilBERT token-importance list.
+- **Notebook line 153**: `            label="DistilBERT Important Words",`
+  - Labels DistilBERT explanation output.
+- **Notebook line 154**: `            lines=12`
+  - Sets textbox height to display many important words clearly.
+- **Notebook line 155**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 157**: `    confidence_chart = gr.BarPlot(`
+  - Creates chart component for side-by-side confidence comparison.
+- **Notebook line 158**: `        x="Model",`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 159**: `        y="Confidence",`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 160**: `        title="Model Confidence Comparison",`
+  - Sets title for model confidence chart.
+- **Notebook line 161**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 163**: `    analyze_btn.click(`
+  - Binds compare button to `compare_models` callback and output components.
+- **Notebook line 164**: `        fn=compare_models,`
+  - Specifies function executed on button click.
+- **Notebook line 165**: `        inputs=text_input,`
+  - Sends only review text as callback input.
+- **Notebook line 166**: `        outputs=[`
+  - Starts list of UI components that receive callback results.
+- **Notebook line 167**: `            result_output,`
+  - Maps first returned value to result summary textbox.
+- **Notebook line 168**: `            bert_words_output,`
+  - Maps second returned value to BERT words textbox.
+- **Notebook line 169**: `            distil_words_output,`
+  - Maps third returned value to DistilBERT words textbox.
+- **Notebook line 170**: `            confidence_chart,`
+  - Maps fourth returned value to confidence bar chart.
+- **Notebook line 171**: `        ]`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 172**: `    )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 178**: `    with gr.Tab("Overall Model Analysis"):`
+  - Creates additional tab that shows static overall metrics and conclusion.
+- **Notebook line 180**: `        analysis = f"""`
+  - Starts multi-line formatted report text using already computed metrics.
+- **Notebook line 182**: `BERT Accuracy:`
+  - Section heading for BERT accuracy.
+- **Notebook line 183**: `{bert_results['accuracy']:.4f}`
+  - Inserts BERT accuracy rounded to 4 decimals.
+- **Notebook line 185**: `DistilBERT Accuracy:`
+  - Section heading for DistilBERT accuracy.
+- **Notebook line 186**: `{distil_results['accuracy']:.4f}`
+  - Inserts DistilBERT accuracy rounded to 4 decimals.
+- **Notebook line 188**: `---------------------------------------`
+  - Visual separator line inside output text.
+- **Notebook line 190**: `BERT F1 Score:`
+  - Section heading for BERT F1 score.
+- **Notebook line 191**: `{bert_results['f1']:.4f}`
+  - Inserts BERT F1 score rounded to 4 decimals.
+- **Notebook line 193**: `DistilBERT F1 Score:`
+  - Section heading for DistilBERT F1 score.
+- **Notebook line 194**: `{distil_results['f1']:.4f}`
+  - Inserts DistilBERT F1 score rounded to 4 decimals.
+- **Notebook line 196**: `---------------------------------------`
+  - Visual separator line inside output text.
+- **Notebook line 198**: `Training Time Comparison:`
+  - Heading for training speed comparison section.
+- **Notebook line 200**: `BERT:`
+  - Label introducing BERT training time value.
+- **Notebook line 201**: `{bert_results['training_time']:.2f} sec`
+  - Inserts BERT training time rounded to 2 decimals.
+- **Notebook line 203**: `DistilBERT:`
+  - Label introducing DistilBERT training time value.
+- **Notebook line 204**: `{distil_results['training_time']:.2f} sec`
+  - Inserts DistilBERT training time rounded to 2 decimals.
+- **Notebook line 206**: `---------------------------------------`
+  - Visual separator line inside output text.
+- **Notebook line 208**: `Conclusion:`
+  - Heading for final high-level takeaways.
+- **Notebook line 210**: `1. BERT performs better in contextual understanding.`
+  - Takeaway 1: BERT usually captures context better due to larger architecture.
+- **Notebook line 212**: `2. DistilBERT is faster and lightweight.`
+  - Takeaway 2: DistilBERT trades a bit of accuracy for speed and smaller size.
+- **Notebook line 214**: `3. BERT usually gives slightly better accuracy.`
+  - Takeaway 3: BERT often edges ahead in final quality metrics.
+- **Notebook line 216**: `4. DistilBERT is better for real-time systems.`
+  - Takeaway 4: DistilBERT is often preferable for latency-sensitive deployment.
+- **Notebook line 218**: `"""`
+  - This line contributes to data flow or formatting in the current block.
+- **Notebook line 220**: `        gr.Textbox(`
+  - Starts creation of textbox component for showing static informational text.
+- **Notebook line 221**: `            value=analysis,`
+  - Loads formatted analysis text into a UI textbox.
+- **Notebook line 222**: `            lines=25,`
+  - Sets textbox height large enough for full report visibility.
+- **Notebook line 223**: `            label="Deep Analysis"`
+  - Labels the analysis textbox in the tab.
+- **Notebook line 224**: `        )`
+  - Structural punctuation that groups expressions/arguments and keeps multi-line code readable.
+- **Notebook line 226**: `demo.launch(share=True)`
+  - Launches Gradio app and generates a public share link.
+
+## Code Cell 3
+
+- No executable code lines in this cell.
